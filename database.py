@@ -63,12 +63,12 @@ def add_item(item_name: str, description: str, user_telegram_id: int, type: str,
         "item_name": item_name,
         "description": description,
         "user_telegram_id": user_telegram_id,
-        "location": location,
-        "item_image": item_image,
         "type": type,
         "status": status,
         "telegram_message_id": telegram_message_id
     }
+    if item_image:
+        data["item_image"] = item_image
     response = client.table("items").insert(data).execute()
     return response
 

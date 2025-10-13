@@ -42,7 +42,6 @@ def format_post(post, lang: str) -> str:
             f"{get_text('post', lang)} #{post.get('id', 'N/A')} — {post.get('type', '').upper()}\n"
             f"{get_text('title', lang)}: {post.get('item_name', '')}\n"
             f"{get_text('description', lang)}: {post.get('description', '')}\n"
-            f"{get_text('last_seen', lang)} / {get_text('found_at', lang)}: {post.get('location', '')}\n"
             f"{get_text('contact', lang)}: {get_user_contact(post.get('user_telegram_id'))}"
         )
     else:
@@ -51,7 +50,6 @@ def format_post(post, lang: str) -> str:
             f"{get_text('post', lang)} #{post.id} — {post.kind.upper()}\n"
             f"{get_text('title', lang)}: {post.title}\n"
             f"{get_text('description', lang)}: {post.description}\n"
-            f"{get_text('last_seen', lang)} / {get_text('found_at', lang)}: {post.location}\n"
             f"{get_text('contact', lang)}: {post.contact}"
         )
 
@@ -270,12 +268,6 @@ def handle_post_flow(message: telebot.types.Message):
 
     if step == "description":
         data["description"] = message.text.strip()
-        state["step"] = "location"
-        bot.send_message(message.chat.id, get_text("description_prompt", lang))
-        return
-
-    if step == "location":
-        data["location"] = message.text.strip()
         state["step"] = "contact"
         bot.send_message(message.chat.id, get_text("location_prompt", lang))
         return
@@ -288,7 +280,6 @@ def handle_post_flow(message: telebot.types.Message):
                 item_name=data["title"],
                 description=data["description"],
                 user_telegram_id=chat_id,
-                location=data["location"],
                 type=kind,
                 status='active'
             )
