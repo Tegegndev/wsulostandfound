@@ -1,5 +1,7 @@
 #supabase database connection and functions
 
+#users table name is botusers not users so use it not users
+
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
@@ -21,14 +23,14 @@ def create_user(telegram_id: int, username: str = None, first_name: str = None, 
         "phone_number": phone_number,
         "language": "en"  # default language
     }
-    response = client.table("users").insert(data).execute()
+    response = client.table("botusers").insert(data).execute()
     return response
 
 
 def get_user(telegram_id: int):
     """Get user data by telegram_id."""
     try:
-        response = client.table("users").select("*").eq("telegram_id", telegram_id).execute()
+        response = client.table("botusers").select("*").eq("telegram_id", telegram_id).execute()
         if response.data:
             return response.data[0]
         else:
@@ -40,14 +42,14 @@ def get_user(telegram_id: int):
 
 def update_user_language(telegram_id: int, language: str):
     """Update user's language preference."""
-    response = client.table("users").update({"language": language}).eq("telegram_id", telegram_id).execute()
+    response = client.table("botusers").update({"language": language}).eq("telegram_id", telegram_id).execute()
     return response
 
 
 def get_user_language(telegram_id: int):
     """Get user's language preference. Returns None if user not registered."""
     try:
-        response = client.table("users").select("language").eq("telegram_id", telegram_id).execute()
+        response = client.table("botusers").select("language").eq("telegram_id", telegram_id).execute()
         if response.data:
             return response.data[0].get("language", "en")
         return None  # not registered
@@ -55,7 +57,7 @@ def get_user_language(telegram_id: int):
         return None
 
 
-def add_item(item_name: str, description: str, user_telegram_id: int, location: str, type: str, item_image: str = None, status: str = 'active', telegram_message_id: int = None):
+def add_item(item_name: str, description: str, user_telegram_id: int, type: str, item_image: str = None, status: str = 'active', telegram_message_id: int = None):
     """Add a new item to the database."""
     data = {
         "item_name": item_name,
