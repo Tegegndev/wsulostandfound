@@ -6,7 +6,7 @@ from typing import List
 import telebot
 import dotenv
 from localization import get_text, get_supported_languages
-from database import create_user, get_user_language, update_user_language
+from database import create_user, get_user_language, update_user_language, add_item, get_items, search_items, get_user
 
 dotenv.load_dotenv()
 
@@ -28,27 +28,45 @@ class ItemPost:
     contact: str
 
 
-# Demo data (in-memory)
-demo_posts: List[ItemPost] = [
-    ItemPost(1, "lost", "Black wallet", "Black leather wallet with ID", "Library", "@alice"),
-    ItemPost(2, "found", "Set of keys", "Bunch of keys with a blue fob", "Cafeteria", "@bob"),
-    ItemPost(3, "lost", "iPhone 12", "Black iPhone in a green case", "Bus 42", "+123456789"),
-]
+# Demo data (in-memory) - now using database
+# demo_posts: List[ItemPost] = [
+#     ItemPost(1, "lost", "Black wallet", "Black leather wallet with ID", "Library", "@alice"),
+#     ItemPost(2, "found", "Set of keys", "Bunch of keys with a blue fob", "Cafeteria", "@bob"),
+#     ItemPost(3, "lost", "iPhone 12", "Black iPhone in a green case", "Bus 42", "+123456789"),
+# ]
 
 
-def format_post(post: ItemPost, lang: str) -> str:
-    return (
-        f"{get_text('post', lang)} #{post.id} — {post.kind.upper()}\n"
-        f"{get_text('title', lang)}: {post.title}\n"
-        f"{get_text('description', lang)}: {post.description}\n"
-        f"{get_text('last_seen', lang)} / {get_text('found_at', lang)}: {post.location}\n"
-        f"{get_text('contact', lang)}: {post.contact}"
-    )
+def format_post(post, lang: str) -> str:
+    if isinstance(post, dict):
+        return (
+            f"{get_text('post', lang)} #{post.get('id', 'N/A')} — {post.get('type', '').upper()}\n"
+            f"{get_text('title', lang)}: {post.get('item_name', '')}\n"
+            f"{get_text('description', lang)}: {post.get('description', '')}\n"
+            f"{get_text('last_seen', lang)} / {get_text('found_at', lang)}: {post.get('location', '')}\n"
+            f"{get_text('contact', lang)}: {get_user_contact(post.get('user_telegram_id'))}"
+        )
+    else:
+        # fallback for old ItemPost
+        return (
+            f"{get_text('post', lang)} #{post.id} — {post.kind.upper()}\n"
+            f"{get_text('title', lang)}: {post.title}\n"
+            f"{get_text('description', lang)}: {post.description}\n"
+            f"{get_text('last_seen', lang)} / {get_text('found_at', lang)}: {post.location}\n"
+            f"{get_text('contact', lang)}: {post.contact}"
+        )
+
+
+def get_user_contact(telegram_id: int) -> str:
+    """Get user contact info."""
+    user = get_user(telegram_id)
+    if user:
+        return user.get('phone_number', '') or user.get('username', '') or str(telegram_id)
+    return str(telegram_id)
 
 
 def get_user_lang(chat_id: int) -> str:
     """Get user's language preference."""
-    lang = get_user_language(str(chat_id))
+    lang = get_user_language(chat_id)
     return lang if lang else "en"
 
 
@@ -80,8 +98,8 @@ def start_post_flow(message: telebot.types.Message, kind: str):
 @bot.message_handler(commands=["start"])
 def cmd_start(message: telebot.types.Message):
     chat_id = message.chat.id
-    user_id = str(chat_id)
-    lang = get_user_language(user_id)
+    telegram_id = chat_id
+    lang = get_user_language(telegram_id)
     if lang is None:
         # Not registered, ask for phone
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -101,25 +119,24 @@ def cmd_start(message: telebot.types.Message):
 
 @bot.message_handler(commands=["list"])
 def cmd_list(message: telebot.types.Message):
-    ensure_user_registered(message.chat.id, message)
     lang = get_user_lang(message.chat.id)
-    if not demo_posts:
+    posts = get_items()
+    if not posts:
         bot.reply_to(message, get_text("no_posts", lang))
         return
-    for p in demo_posts:
+    for p in posts:
         bot.send_message(message.chat.id, format_post(p, lang))
 
 
 @bot.message_handler(commands=["search"])
 def cmd_search(message: telebot.types.Message):
-    ensure_user_registered(message.chat.id, message)
     lang = get_user_lang(message.chat.id)
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         bot.reply_to(message, get_text("search_usage", lang))
         return
     keyword = parts[1].lower()
-    results = [p for p in demo_posts if keyword in p.title.lower() or keyword in p.description.lower()]
+    results = search_items(keyword)
     if not results:
         bot.reply_to(message, get_text("no_results", lang))
         return
@@ -184,15 +201,41 @@ def show_settings(message: telebot.types.Message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("lang_"))
 def handle_language_selection(call: telebot.types.CallbackQuery):
     lang_code = call.data[5:]  # remove "lang_"
-    user_id = str(call.message.chat.id)
+    telegram_id = call.message.chat.id
     try:
-        update_user_language(user_id, lang_code)
+        update_user_language(telegram_id, lang_code)
         lang = lang_code
         bot.answer_callback_query(call.id, get_text("language_set", lang, language=get_text(lang_code, lang)))
         bot.edit_message_text(get_text("choose_language", lang), call.message.chat.id, call.message.message_id)
     except Exception as e:
         logger.error(f"Error updating language: {e}")
         bot.answer_callback_query(call.id, "Error setting language.")
+
+
+@bot.message_handler(content_types=['contact'])
+def handle_contact(message: telebot.types.Contact):
+    chat_id = message.chat.id
+    state = user_states.get(chat_id)
+    if state and state.get("kind") == "registration" and state.get("step") == "phone":
+        phone = message.contact.phone_number
+        telegram_id = chat_id
+        username = message.from_user.username
+        first_name = message.from_user.first_name
+        try:
+            create_user(telegram_id, username, first_name, phone)
+            bot.send_message(chat_id, get_text("registration_complete", "en"))
+            # Now show main menu
+            lang = "en"  # default
+            text = get_text("welcome", lang)
+            markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+            markup.row(get_text("list", lang), get_text("search", lang))
+            markup.row(get_text("post_lost", lang), get_text("post_found", lang))
+            markup.row(get_text("settings", lang), get_text("help", lang))
+            bot.send_message(chat_id, text, reply_markup=markup)
+        except Exception as e:
+            logger.error(f"Error creating user: {e}")
+            bot.send_message(chat_id, "Error during registration. Please try again.")
+        del user_states[chat_id]
 
 
 @bot.message_handler(func=lambda m: m.chat.id in user_states)
@@ -205,38 +248,11 @@ def handle_post_flow(message: telebot.types.Message):
     step = state.get("step")
     data = state.get("data", {})
 
-    # Registration flow
-    if kind == "registration" and step == "phone":
-        if message.contact:
-            phone = message.contact.phone_number
-            user_id = str(chat_id)
-            username = message.from_user.username
-            first_name = message.from_user.first_name
-            try:
-                create_user(user_id, username, first_name, phone)
-                bot.send_message(chat_id, get_text("registration_complete", "en"))
-                # Now show main menu
-                lang = "en"  # default
-                text = get_text("welcome", lang)
-                markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-                markup.row(get_text("list", lang), get_text("search", lang))
-                markup.row(get_text("post_lost", lang), get_text("post_found", lang))
-                markup.row(get_text("settings", lang), get_text("help", lang))
-                bot.send_message(chat_id, text, reply_markup=markup)
-            except Exception as e:
-                logger.error(f"Error creating user: {e}")
-                bot.send_message(chat_id, "Error during registration. Please try again.")
-        else:
-            # Remind to share phone
-            bot.send_message(chat_id, get_text("share_phone", "en"))
-        del user_states[chat_id]
-        return
-
     # Search flow
     lang = get_user_lang(chat_id)
     if kind == "search" and step == "keyword":
         keyword = message.text.strip().lower()
-        results = [p for p in demo_posts if keyword in p.title.lower() or keyword in p.description.lower()]
+        results = search_items(keyword)
         if not results:
             bot.send_message(message.chat.id, get_text("no_results", lang))
         else:
@@ -267,11 +283,21 @@ def handle_post_flow(message: telebot.types.Message):
     if step == "contact":
         data["contact"] = message.text.strip()
         # finalize
-        new_id = max([p.id for p in demo_posts], default=0) + 1
-        post = ItemPost(new_id, kind, data["title"], data["description"], data["location"], data["contact"])
-        demo_posts.append(post)
-        bot.send_message(message.chat.id, get_text("post_added", lang))
-        bot.send_message(message.chat.id, format_post(post, lang))
+        try:
+            add_item(
+                item_name=data["title"],
+                description=data["description"],
+                user_telegram_id=chat_id,
+                location=data["location"],
+                type=kind,
+                status='active'
+            )
+            bot.send_message(message.chat.id, get_text("post_added", lang))
+            # Optionally send the post back
+            # For now, just confirm
+        except Exception as e:
+            logger.error(f"Error adding item: {e}")
+            bot.send_message(message.chat.id, "Error adding post. Please try again.")
         del user_states[message.chat.id]
 
 

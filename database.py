@@ -12,10 +12,10 @@ key: str = os.getenv("SUPABASE_KEY")
 client: Client = create_client(url, key)
 
 
-def create_user(user_id: str, username: str = None, first_name: str = None, phone_number: str = None):
+def create_user(telegram_id: int, username: str = None, first_name: str = None, phone_number: str = None):
     """Create a new user in the database."""
     data = {
-        "user_id": user_id,
+        "telegram_id": telegram_id,
         "username": username,
         "first_name": first_name,
         "phone_number": phone_number,
@@ -25,10 +25,10 @@ def create_user(user_id: str, username: str = None, first_name: str = None, phon
     return response
 
 
-def get_user(user_id: str):
-    """Get user data by user_id."""
+def get_user(telegram_id: int):
+    """Get user data by telegram_id."""
     try:
-        response = client.table("users").select("*").eq("user_id", user_id).execute()
+        response = client.table("users").select("*").eq("telegram_id", telegram_id).execute()
         if response.data:
             return response.data[0]
         else:
@@ -38,18 +38,62 @@ def get_user(user_id: str):
         return None
 
 
-def update_user_language(user_id: str, language: str):
+def update_user_language(telegram_id: int, language: str):
     """Update user's language preference."""
-    response = client.table("users").update({"language": language}).eq("user_id", user_id).execute()
+    response = client.table("users").update({"language": language}).eq("telegram_id", telegram_id).execute()
     return response
 
 
-def get_user_language(user_id: str):
+def get_user_language(telegram_id: int):
     """Get user's language preference. Returns None if user not registered."""
     try:
-        response = client.table("botusers").select("language").eq("user_id", user_id).execute()
+        response = client.table("users").select("language").eq("telegram_id", telegram_id).execute()
         if response.data:
             return response.data[0].get("language", "en")
         return None  # not registered
     except:
         return None
+
+
+def add_item(item_name: str, description: str, user_telegram_id: int, location: str, type: str, item_image: str = None, status: str = 'active', telegram_message_id: int = None):
+    """Add a new item to the database."""
+    data = {
+        "item_name": item_name,
+        "description": description,
+        "user_telegram_id": user_telegram_id,
+        "location": location,
+        "item_image": item_image,
+        "type": type,
+        "status": status,
+        "telegram_message_id": telegram_message_id
+    }
+    response = client.table("items").insert(data).execute()
+    return response
+
+
+def get_items(type: str = None, status: str = 'active'):
+    """Get items from the database."""
+    try:
+        query = client.table("items").select("*").eq("status", status)
+        if type:
+            query = query.eq("type", type)
+        response = query.execute()
+        return response.data
+    except Exception as e:
+        print(f"Error retrieving items: {e}")
+        return []
+
+
+def search_items(keyword: str, type: str = None, status: str = 'active'):
+    """Search items by keyword in item_name or description."""
+    try:
+        items = get_items(type, status)
+        keyword_lower = keyword.lower()
+        results = [
+            item for item in items
+            if keyword_lower in item.get('item_name', '').lower() or keyword_lower in item.get('description', '').lower()
+        ]
+        return results
+    except Exception as e:
+        print(f"Error searching items: {e}")
+        return []
