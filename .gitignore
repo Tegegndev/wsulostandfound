@@ -1,1 +1,6 @@
 .github/
+.env
+__pycache__/
+*.pyc
+*.pyo
+Readme.md
