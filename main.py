@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(API_TOKEN)
 
+# Pending posts for admin approval
+pending_posts = {}
+
 
 @dataclass
 class ItemPost:
@@ -210,6 +213,41 @@ def handle_language_selection(call: telebot.types.CallbackQuery):
         bot.answer_callback_query(call.id, "Error setting language.")
 
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
+def handle_admin_action(call: telebot.types.CallbackQuery):
+    action, pending_id = call.data.split("_", 1)
+    if pending_id not in pending_posts:
+        bot.answer_callback_query(call.id, "Post not found.")
+        return
+    post = pending_posts[pending_id]
+    user_id = post['user_id']
+    if action == "approve":
+        try:
+            added_item = add_item(
+                item_name=post['title'],
+                description=post['description'],
+                user_telegram_id=user_id,
+                type=post['kind'],
+                status='active'
+            )
+            if added_item and added_item.data:
+                item_data = added_item.data[0]
+                # Post to channel
+                channel_username = os.getenv("CHANNEL_USERNAME")
+                formatted_post = format_post(item_data, 'en')
+                bot.send_message(channel_username, formatted_post)
+            bot.send_message(user_id, "Your post has been approved and published!")
+            bot.answer_callback_query(call.id, "Post approved.")
+        except Exception as e:
+            logger.error(f"Error adding item: {e}")
+            bot.answer_callback_query(call.id, "Error approving post.")
+    elif action == "reject":
+        bot.send_message(user_id, "Your post has been rejected.")
+        bot.answer_callback_query(call.id, "Post rejected.")
+    del pending_posts[pending_id]
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+
+
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message: telebot.types.Contact):
     chat_id = message.chat.id
@@ -269,26 +307,29 @@ def handle_post_flow(message: telebot.types.Message):
     if step == "description":
         data["description"] = message.text.strip()
         state["step"] = "contact"
-        bot.send_message(message.chat.id, get_text("location_prompt", lang))
+        bot.send_message(message.chat.id, get_text("contact_prompt", lang))
         return
 
     if step == "contact":
         data["contact"] = message.text.strip()
-        # finalize
-        try:
-            add_item(
-                item_name=data["title"],
-                description=data["description"],
-                user_telegram_id=chat_id,
-                type=kind,
-                status='active'
-            )
-            bot.send_message(message.chat.id, get_text("post_added", lang))
-            # Optionally send the post back
-            # For now, just confirm
-        except Exception as e:
-            logger.error(f"Error adding item: {e}")
-            bot.send_message(message.chat.id, "Error adding post. Please try again.")
+        # Send to admin for approval
+        pending_id = f"{chat_id}_{len(pending_posts) + 1}"
+        pending_posts[pending_id] = {
+            'kind': kind,
+            'title': data['title'],
+            'description': data['description'],
+            'contact': data['contact'],
+            'user_id': chat_id
+        }
+        admin_id = int(os.getenv("ADMIN_ID"))
+        formatted = f"New {kind} post:\nTitle: {data['title']}\nDescription: {data['description']}\nContact: {data['contact']}\nUser ID: {chat_id}"
+        markup = telebot.types.InlineKeyboardMarkup()
+        markup.row(
+            telebot.types.InlineKeyboardButton("Approve", callback_data=f"approve_{pending_id}"),
+            telebot.types.InlineKeyboardButton("Reject", callback_data=f"reject_{pending_id}")
+        )
+        bot.send_message(admin_id, formatted, reply_markup=markup)
+        bot.send_message(message.chat.id, "Your post has been submitted for review.")
         del user_states[message.chat.id]
 
 

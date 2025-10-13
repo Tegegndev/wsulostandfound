@@ -12,7 +12,7 @@
   "creating_post": "አዲስ {kind} ልጥፍ በመስራት ላይ። የእቃ ርዕስ ምን ነው?",
   "title_prompt": "የእቃ አጭር መግለጫ አቅርብ።",
   "description_prompt": "የመጨረሻ ጊዜ የተለመደበት / የተገኘበት ቦታ የት ነው?",
-  "location_prompt": "ለማግኘት እንዴት ያግኙኛል? (የተጠቃሚ ስም/ስልክ/ኢሜይል)",
+  "contact_prompt": "ለማግኘት እንዴት ያግኙኛል? (የተጠቃሚ ስም/ስልክ/ኢሜይል)",
   "post_added": "እናመሰግናለን — ልጥፍዎ ተጨምሯል። እነሆ ነው፡",
   "search_usage": "አጠቃቀም፡ /search <ቁልፍ ቃል>",
   "choose_language": "ቋንቋ ምረጥ፡",

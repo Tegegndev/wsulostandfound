@@ -12,7 +12,7 @@
   "creating_post": "Creating a new {kind} post. What's the item title?",
   "title_prompt": "Please provide a short description of the item.",
   "description_prompt": "Where was it last seen / found?",
-  "location_prompt": "How can someone contact you? (username/phone/email)",
+  "contact_prompt": "How can someone contact you? (username/phone/email)",
   "post_added": "Thanks — your post has been added. Here it is:",
   "search_usage": "Usage: /search <keyword>",
   "choose_language": "Choose your language:",

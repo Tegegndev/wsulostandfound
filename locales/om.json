@@ -12,7 +12,7 @@
   "creating_post": "Maxxansaa {kind} haaraa uumuu keessa jirta. Maqaa wantaa maali?",
   "title_prompt": "Ibsa gabaabaa wantaa kenn.",
   "description_prompt": "Bakka dhuma yeroo argame ykn ba'e eessatti?",
-  "location_prompt": "Akkam si qunnamu? (maqaa fayyadamaa/telephone/email)",
+  "contact_prompt": "Akkam si qunnamu? (maqaa fayyadamaa/telephone/email)",
   "post_added": "Galatoomi — maxxansiin kee dabalame. Kana ilaali:",
   "search_usage": "Fayyadama: /search <jecha>",
   "choose_language": "Afaan fili:",
