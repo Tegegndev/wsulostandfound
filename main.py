@@ -30,6 +30,10 @@ MEMBERSHIP_CACHE_TTL = 300  # 5 minutes
 language_cache = {}
 LANGUAGE_CACHE_TTL = 600  # 10 minutes
 
+# Cache for user contact info (user_id -> (contact, timestamp))
+user_contact_cache = {}
+USER_CONTACT_CACHE_TTL = 600  # 10 minutes
+
 
 @dataclass
 class ItemPost:
@@ -70,11 +74,26 @@ def format_post(post, lang: str) -> str:
 
 
 def get_user_contact(telegram_id: int) -> str:
-    """Get user contact info."""
+    """Get user contact info with caching."""
+    current_time = time.time()
+    
+    # Check cache first
+    if telegram_id in user_contact_cache:
+        contact, timestamp = user_contact_cache[telegram_id]
+        if current_time - timestamp < USER_CONTACT_CACHE_TTL:
+            return contact
+    
+    # Cache miss or expired, fetch from database
     user = get_user(telegram_id)
     if user:
-        return user.get('phone_number', '') or user.get('username', '') or str(telegram_id)
-    return str(telegram_id)
+        contact = user.get('phone_number', '') or user.get('username', '') or str(telegram_id)
+    else:
+        contact = str(telegram_id)
+    
+    # Update cache
+    user_contact_cache[telegram_id] = (contact, current_time)
+    
+    return contact
 
 
 def get_user_lang(chat_id: int) -> str:
