@@ -89,11 +89,16 @@ def get_items(type: str = None, status: str = 'active'):
 def search_items(keyword: str, type: str = None, status: str = 'active'):
     """Search items by keyword in item_name or description using database filtering."""
     try:
+        # Sanitize keyword to prevent potential injection through special characters
+        # Remove or escape special PostgREST filter characters
+        safe_keyword = keyword.replace(',', ' ').replace('(', '').replace(')', '').replace('.', ' ')
+        
         query = client.table("items").select("*").eq("status", status)
         if type:
             query = query.eq("type", type)
-        # Use PostgreSQL's ilike for case-insensitive search on both fields
-        query = query.or_(f"item_name.ilike.%{keyword}%,description.ilike.%{keyword}%")
+        # Use ilike for case-insensitive pattern matching
+        # Search in item_name or description fields
+        query = query.or_(f"item_name.ilike.%{safe_keyword}%,description.ilike.%{safe_keyword}%")
         response = query.execute()
         return response.data
     except Exception as e:

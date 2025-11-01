@@ -2,7 +2,6 @@ import os
 import logging
 from dataclasses import dataclass
 from typing import List
-from functools import lru_cache
 import time
 
 import telebot
@@ -23,6 +22,7 @@ bot = telebot.TeleBot(API_TOKEN)
 pending_posts = {}
 
 # Cache for channel membership checks (user_id -> (is_member, timestamp))
+# Note: These caches are not thread-safe but pyTelegramBotAPI uses single-threaded polling by default
 membership_cache = {}
 MEMBERSHIP_CACHE_TTL = 300  # 5 minutes
 
@@ -57,9 +57,7 @@ def format_post(post, lang: str) -> str:
     if isinstance(post, dict):
         return (
             f"New {post.get('type', '').upper()} Post\n"
-            f"<a href='tg://user?id={post.get('user_telegram_id')}'>"
-            #f"{get_text('post', lang)} #{post.get('id', 'N/A')} — {post.get('type', '').upper()}\n"
-            f"{get_text('title', lang)}: {post.get('item_name', '')}\n"
+            f"<a href='tg://user?id={post.get('user_telegram_id')}'>{get_text('title', lang)}</a>: {post.get('item_name', '')}\n"
             f"{get_text('description', lang)}: {post.get('description', '')}\n"
             f"{get_text('contact', lang)}: {get_user_contact(post.get('user_telegram_id'))}"
         )
@@ -177,8 +175,9 @@ def cmd_start(message: telebot.types.Message):
         bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
         return
     telegram_id = chat_id
-    lang = get_user_language(telegram_id)
-    if lang is None:
+    lang = get_user_lang(telegram_id)
+    # Check if user needs to register
+    if get_user_language(telegram_id) is None:
         # Not registered, ask for phone
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         button = telebot.types.KeyboardButton(get_text("share_phone_button", "en"), request_contact=True)
