@@ -42,7 +42,9 @@ class ItemPost:
 def format_post(post, lang: str) -> str:
     if isinstance(post, dict):
         return (
-            f"{get_text('post', lang)} #{post.get('id', 'N/A')} — {post.get('type', '').upper()}\n"
+            f"New {post.get('type', '').upper()} Post\n"
+            f"<a href='tg://user?id={post.get('user_telegram_id')}'>"
+            #f"{get_text('post', lang)} #{post.get('id', 'N/A')} — {post.get('type', '').upper()}\n"
             f"{get_text('title', lang)}: {post.get('item_name', '')}\n"
             f"{get_text('description', lang)}: {post.get('description', '')}\n"
             f"{get_text('contact', lang)}: {get_user_contact(post.get('user_telegram_id'))}"
@@ -69,6 +71,17 @@ def get_user_lang(chat_id: int) -> str:
     """Get user's language preference."""
     lang = get_user_language(chat_id)
     return lang if lang else "en"
+
+
+def is_user_member(chat_id: int) -> bool:
+    """Check if user is a member of the required channel."""
+    channel_username = os.getenv("CHANNEL_USERNAME")
+    try:
+        member = bot.get_chat_member(channel_username, chat_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except Exception as e:
+        logger.error(f"Error checking membership: {e}")
+        return False
 
 
 def ensure_user_registered(chat_id: int, message: telebot.types.Message):
@@ -99,6 +112,13 @@ def start_post_flow(message: telebot.types.Message, kind: str):
 @bot.message_handler(commands=["start"])
 def cmd_start(message: telebot.types.Message):
     chat_id = message.chat.id
+    # Check if user has joined the channel
+    if not is_user_member(chat_id):
+        channel_username = os.getenv("CHANNEL_USERNAME")
+        markup = telebot.types.InlineKeyboardMarkup()
+        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
+        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
+        return
     telegram_id = chat_id
     lang = get_user_language(telegram_id)
     if lang is None:
@@ -120,6 +140,14 @@ def cmd_start(message: telebot.types.Message):
 
 @bot.message_handler(commands=["list"])
 def cmd_list(message: telebot.types.Message):
+    chat_id = message.chat.id
+    # Check if user has joined the channel
+    if not is_user_member(chat_id):
+        channel_username = os.getenv("CHANNEL_USERNAME")
+        markup = telebot.types.InlineKeyboardMarkup()
+        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
+        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
+        return
     lang = get_user_lang(message.chat.id)
     posts = get_items()
     if not posts:
@@ -131,6 +159,14 @@ def cmd_list(message: telebot.types.Message):
 
 @bot.message_handler(commands=["search"])
 def cmd_search(message: telebot.types.Message):
+    chat_id = message.chat.id
+    # Check if user has joined the channel
+    if not is_user_member(chat_id):
+        channel_username = os.getenv("CHANNEL_USERNAME")
+        markup = telebot.types.InlineKeyboardMarkup()
+        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
+        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
+        return
     lang = get_user_lang(message.chat.id)
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
@@ -147,11 +183,27 @@ def cmd_search(message: telebot.types.Message):
 
 @bot.message_handler(commands=["post_lost"])
 def cmd_post_lost(message: telebot.types.Message):
+    chat_id = message.chat.id
+    # Check if user has joined the channel
+    if not is_user_member(chat_id):
+        channel_username = os.getenv("CHANNEL_USERNAME")
+        markup = telebot.types.InlineKeyboardMarkup()
+        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
+        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
+        return
     start_post_flow(message, "lost")
 
 
 @bot.message_handler(commands=["post_found"])
 def cmd_post_found(message: telebot.types.Message):
+    chat_id = message.chat.id
+    # Check if user has joined the channel
+    if not is_user_member(chat_id):
+        channel_username = os.getenv("CHANNEL_USERNAME")
+        markup = telebot.types.InlineKeyboardMarkup()
+        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
+        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
+        return
     start_post_flow(message, "found")
 
 
@@ -164,6 +216,14 @@ def cmd_post_found(message: telebot.types.Message):
     get_text("help", get_user_lang(m.chat.id))
 })
 def handle_button_press(message: telebot.types.Message):
+    chat_id = message.chat.id
+    # Check if user has joined the channel
+    if not is_user_member(chat_id):
+        channel_username = os.getenv("CHANNEL_USERNAME")
+        markup = telebot.types.InlineKeyboardMarkup()
+        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
+        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
+        return
     ensure_user_registered(message.chat.id, message)
     lang = get_user_lang(message.chat.id)
     text = message.text.strip()
