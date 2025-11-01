@@ -87,15 +87,20 @@ def get_items(type: str = None, status: str = 'active'):
 
 
 def search_items(keyword: str, type: str = None, status: str = 'active'):
-    """Search items by keyword in item_name or description."""
+    """Search items by keyword in item_name or description using database filtering."""
     try:
-        items = get_items(type, status)
-        keyword_lower = keyword.lower()
-        results = [
-            item for item in items
-            if keyword_lower in item.get('item_name', '').lower() or keyword_lower in item.get('description', '').lower()
-        ]
-        return results
+        # Sanitize keyword to prevent potential injection through special characters
+        # Remove or escape special PostgREST filter characters
+        safe_keyword = keyword.replace(',', ' ').replace('(', '').replace(')', '').replace('.', ' ')
+        
+        query = client.table("items").select("*").eq("status", status)
+        if type:
+            query = query.eq("type", type)
+        # Use ilike for case-insensitive pattern matching
+        # Search in item_name or description fields
+        query = query.or_(f"item_name.ilike.%{safe_keyword}%,description.ilike.%{safe_keyword}%")
+        response = query.execute()
+        return response.data
     except Exception as e:
         print(f"Error searching items: {e}")
         return []

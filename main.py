@@ -2,6 +2,7 @@ import os
 import logging
 from dataclasses import dataclass
 from typing import List
+import time
 
 import telebot
 import dotenv
@@ -19,6 +20,19 @@ bot = telebot.TeleBot(API_TOKEN)
 
 # Pending posts for admin approval
 pending_posts = {}
+
+# Cache for channel membership checks (user_id -> (is_member, timestamp))
+# Note: These caches are not thread-safe but pyTelegramBotAPI uses single-threaded polling by default
+membership_cache = {}
+MEMBERSHIP_CACHE_TTL = 300  # 5 minutes
+
+# Cache for user language preferences (user_id -> (language, timestamp))
+language_cache = {}
+LANGUAGE_CACHE_TTL = 600  # 10 minutes
+
+# Cache for user contact info (user_id -> (contact, timestamp))
+user_contact_cache = {}
+USER_CONTACT_CACHE_TTL = 600  # 10 minutes
 
 
 @dataclass
@@ -43,9 +57,7 @@ def format_post(post, lang: str) -> str:
     if isinstance(post, dict):
         return (
             f"New {post.get('type', '').upper()} Post\n"
-            f"<a href='tg://user?id={post.get('user_telegram_id')}'>"
-            #f"{get_text('post', lang)} #{post.get('id', 'N/A')} — {post.get('type', '').upper()}\n"
-            f"{get_text('title', lang)}: {post.get('item_name', '')}\n"
+            f"<a href='tg://user?id={post.get('user_telegram_id')}'>{get_text('title', lang)}</a>: {post.get('item_name', '')}\n"
             f"{get_text('description', lang)}: {post.get('description', '')}\n"
             f"{get_text('contact', lang)}: {get_user_contact(post.get('user_telegram_id'))}"
         )
@@ -60,25 +72,68 @@ def format_post(post, lang: str) -> str:
 
 
 def get_user_contact(telegram_id: int) -> str:
-    """Get user contact info."""
+    """Get user contact info with caching."""
+    current_time = time.time()
+    
+    # Check cache first
+    if telegram_id in user_contact_cache:
+        contact, timestamp = user_contact_cache[telegram_id]
+        if current_time - timestamp < USER_CONTACT_CACHE_TTL:
+            return contact
+    
+    # Cache miss or expired, fetch from database
     user = get_user(telegram_id)
     if user:
-        return user.get('phone_number', '') or user.get('username', '') or str(telegram_id)
-    return str(telegram_id)
+        contact = user.get('phone_number', '') or user.get('username', '') or str(telegram_id)
+    else:
+        contact = str(telegram_id)
+    
+    # Update cache
+    user_contact_cache[telegram_id] = (contact, current_time)
+    
+    return contact
 
 
 def get_user_lang(chat_id: int) -> str:
-    """Get user's language preference."""
+    """Get user's language preference with caching."""
+    current_time = time.time()
+    
+    # Check cache first
+    if chat_id in language_cache:
+        lang, timestamp = language_cache[chat_id]
+        if current_time - timestamp < LANGUAGE_CACHE_TTL:
+            return lang
+    
+    # Cache miss or expired, fetch from database
     lang = get_user_language(chat_id)
-    return lang if lang else "en"
+    lang = lang if lang else "en"
+    
+    # Update cache
+    language_cache[chat_id] = (lang, current_time)
+    
+    return lang
 
 
 def is_user_member(chat_id: int) -> bool:
-    """Check if user is a member of the required channel."""
+    """Check if user is a member of the required channel with caching."""
+    current_time = time.time()
+    
+    # Check cache first
+    if chat_id in membership_cache:
+        is_member, timestamp = membership_cache[chat_id]
+        if current_time - timestamp < MEMBERSHIP_CACHE_TTL:
+            return is_member
+    
+    # Cache miss or expired, check with Telegram API
     channel_username = os.getenv("CHANNEL_USERNAME")
     try:
         member = bot.get_chat_member(channel_username, chat_id)
-        return member.status in ['member', 'administrator', 'creator']
+        is_member = member.status in ['member', 'administrator', 'creator']
+        
+        # Update cache
+        membership_cache[chat_id] = (is_member, current_time)
+        
+        return is_member
     except Exception as e:
         logger.error(f"Error checking membership: {e}")
         return False
@@ -120,8 +175,9 @@ def cmd_start(message: telebot.types.Message):
         bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
         return
     telegram_id = chat_id
-    lang = get_user_language(telegram_id)
-    if lang is None:
+    lang = get_user_lang(telegram_id)
+    # Check if user needs to register
+    if get_user_language(telegram_id) is None:
         # Not registered, ask for phone
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         button = telebot.types.KeyboardButton(get_text("share_phone_button", "en"), request_contact=True)
@@ -207,14 +263,7 @@ def cmd_post_found(message: telebot.types.Message):
     start_post_flow(message, "found")
 
 
-@bot.message_handler(func=lambda m: m.text and m.text in {
-    get_text("list", get_user_lang(m.chat.id)),
-    get_text("search", get_user_lang(m.chat.id)),
-    get_text("post_lost", get_user_lang(m.chat.id)),
-    get_text("post_found", get_user_lang(m.chat.id)),
-    get_text("settings", get_user_lang(m.chat.id)),
-    get_text("help", get_user_lang(m.chat.id))
-})
+@bot.message_handler(func=lambda m: m.text and m.chat.id)
 def handle_button_press(message: telebot.types.Message):
     chat_id = message.chat.id
     # Check if user has joined the channel
@@ -224,28 +273,38 @@ def handle_button_press(message: telebot.types.Message):
         markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
         bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
         return
+    
     ensure_user_registered(message.chat.id, message)
     lang = get_user_lang(message.chat.id)
     text = message.text.strip()
-    if text == get_text("list", lang):
+    
+    # Pre-compute button texts for this user's language
+    list_text = get_text("list", lang)
+    search_text = get_text("search", lang)
+    post_lost_text = get_text("post_lost", lang)
+    post_found_text = get_text("post_found", lang)
+    settings_text = get_text("settings", lang)
+    help_text = get_text("help", lang)
+    
+    # Match against button texts
+    if text == list_text:
         cmd_list(message)
         return
-    if text == get_text("search", lang):
+    if text == search_text:
         # enter search state
-        chat_id = message.chat.id
         user_states[chat_id] = {"kind": "search", "step": "keyword"}
         bot.send_message(chat_id, get_text("search_prompt", lang))
         return
-    if text == get_text("post_lost", lang):
+    if text == post_lost_text:
         start_post_flow(message, "lost")
         return
-    if text == get_text("post_found", lang):
+    if text == post_found_text:
         start_post_flow(message, "found")
         return
-    if text == get_text("settings", lang):
+    if text == settings_text:
         show_settings(message)
         return
-    if text == get_text("help", lang):
+    if text == help_text:
         cmd_start(message)
         return
 
@@ -265,6 +324,11 @@ def handle_language_selection(call: telebot.types.CallbackQuery):
     telegram_id = call.message.chat.id
     try:
         update_user_language(telegram_id, lang_code)
+        
+        # Invalidate language cache for this user
+        if telegram_id in language_cache:
+            del language_cache[telegram_id]
+        
         lang = lang_code
         bot.answer_callback_query(call.id, get_text("language_set", lang, language=get_text(lang_code, lang)))
         bot.edit_message_text(get_text("choose_language", lang), call.message.chat.id, call.message.message_id)
