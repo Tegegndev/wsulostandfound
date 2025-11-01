@@ -87,15 +87,15 @@ def get_items(type: str = None, status: str = 'active'):
 
 
 def search_items(keyword: str, type: str = None, status: str = 'active'):
-    """Search items by keyword in item_name or description."""
+    """Search items by keyword in item_name or description using database filtering."""
     try:
-        items = get_items(type, status)
-        keyword_lower = keyword.lower()
-        results = [
-            item for item in items
-            if keyword_lower in item.get('item_name', '').lower() or keyword_lower in item.get('description', '').lower()
-        ]
-        return results
+        query = client.table("items").select("*").eq("status", status)
+        if type:
+            query = query.eq("type", type)
+        # Use PostgreSQL's ilike for case-insensitive search on both fields
+        query = query.or_(f"item_name.ilike.%{keyword}%,description.ilike.%{keyword}%")
+        response = query.execute()
+        return response.data
     except Exception as e:
         print(f"Error searching items: {e}")
         return []

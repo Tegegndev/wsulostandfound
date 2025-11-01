@@ -14,16 +14,15 @@ def load_locales():
             with open(os.path.join(LOCALES_DIR, filename), 'r', encoding='utf-8') as f:
                 locales[lang_code] = json.load(f)
 
+# Preload locales on module import for better performance
+load_locales()
+
 def get_text(key: str, lang: str = 'en', **kwargs) -> str:
     """Get localized text for a key."""
-    if not locales:
-        load_locales()
     locale = locales.get(lang, locales.get('en', {}))
     text = locale.get(key, f"[{key}]")  # fallback to key in brackets if not found
     return text.format(**kwargs) if kwargs else text
 
 def get_supported_languages():
     """Get list of supported language codes."""
-    if not locales:
-        load_locales()
     return list(locales.keys())
