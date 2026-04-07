@@ -5,13 +5,32 @@
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
+from typing import Optional
 
 load_dotenv()
 
-url: str = os.getenv("SUPABASE_URL")
-key: str = os.getenv("SUPABASE_KEY")
+# Read env vars once
+url: Optional[str] = os.getenv("SUPABASE_URL")
+key: Optional[str] = os.getenv("SUPABASE_KEY")
 
-client: Client = create_client(url, key)
+# Lazy client initialization to avoid creating the Supabase client at import time.
+# This gives clearer error messages if env vars are missing and avoids unexpected
+# initialization side-effects (helpful during testing/imports).
+_client: Optional[Client] = None
+
+
+def get_client() -> Client:
+    global _client
+    if _client is not None:
+        return _client
+
+    if not url or not key:
+        raise RuntimeError(
+            "SUPABASE_URL and SUPABASE_KEY must be set in the environment or .env file."
+        )
+
+    _client = create_client(url, key)
+    return _client
 
 
 def create_user(telegram_id: int, username: str = None, first_name: str = None, phone_number: str = None):
@@ -23,6 +42,7 @@ def create_user(telegram_id: int, username: str = None, first_name: str = None, 
         "phone_number": phone_number,
         "language": "en"  # default language
     }
+    client = get_client()
     response = client.table("botusers").insert(data).execute()
     return response
 
@@ -30,6 +50,7 @@ def create_user(telegram_id: int, username: str = None, first_name: str = None, 
 def get_user(telegram_id: int):
     """Get user data by telegram_id."""
     try:
+        client = get_client()
         response = client.table("botusers").select("*").eq("telegram_id", telegram_id).execute()
         if response.data:
             return response.data[0]
@@ -42,6 +63,7 @@ def get_user(telegram_id: int):
 
 def update_user_language(telegram_id: int, language: str):
     """Update user's language preference."""
+    client = get_client()
     response = client.table("botusers").update({"language": language}).eq("telegram_id", telegram_id).execute()
     return response
 
@@ -49,6 +71,7 @@ def update_user_language(telegram_id: int, language: str):
 def get_user_language(telegram_id: int):
     """Get user's language preference. Returns None if user not registered."""
     try:
+        client = get_client()
         response = client.table("botusers").select("language").eq("telegram_id", telegram_id).execute()
         if response.data:
             return response.data[0].get("language", "en")
@@ -69,6 +92,7 @@ def add_item(item_name: str, description: str, user_telegram_id: int, type: str,
     }
     if item_image:
         data["item_image"] = item_image
+    client = get_client()
     response = client.table("items").insert(data).execute()
     return response
 
@@ -76,6 +100,7 @@ def add_item(item_name: str, description: str, user_telegram_id: int, type: str,
 def get_items(type: str = None, status: str = 'active'):
     """Get items from the database."""
     try:
+        client = get_client()
         query = client.table("items").select("*").eq("status", status)
         if type:
             query = query.eq("type", type)

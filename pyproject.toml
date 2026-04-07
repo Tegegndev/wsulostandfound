@@ -1,0 +1,11 @@
+[project]
+name = "wsulostandfound"
+version = "0.1.0"
+description = "Telegram bot helps you to find lost items easily"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dotenv>=0.9.9",
+    "supabase>=2.3.0",
+    "telebot>=0.0.5",
+]
