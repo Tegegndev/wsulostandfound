@@ -124,3 +124,8 @@ def search_items(keyword: str, type: str = None, status: str = 'active'):
     except Exception as e:
         print(f"Error searching items: {e}")
         return []
+
+if __name__== "__main__":
+    #check db connection
+    client = get_client()
+    print("Supabase client initialized successfully.", client)
