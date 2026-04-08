@@ -9,6 +9,9 @@ from helpers import ensure_user_registered, get_user_lang, is_user_member, inval
 from localization import get_text, get_supported_languages
 from database import create_user, update_user_language, add_item, get_items, search_items, get_user
 
+from commands import commands_register
+from utils import user_states
+
 dotenv.load_dotenv()
 
 API_TOKEN = os.getenv("TELEGRAM_TOKEN", "REPLACE_WITH_YOUR_TOKEN")
@@ -17,6 +20,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(API_TOKEN)
+commands_register(bot)
 
 # Pending posts for admin approval
 pending_posts = {}
@@ -45,7 +49,7 @@ class ItemPost:
 
 
 # Simple flow state container (per-user, in-memory)
-user_states = {}
+
 
 MENU_KEYS = ("list", "search", "post_lost", "post_found", "settings", "help")
 
@@ -61,111 +65,10 @@ def _build_menu_button_texts() -> set[str]:
 MENU_BUTTON_TEXTS = _build_menu_button_texts()
 
 
-def start_post_flow(message: telebot.types.Message, kind: str):
-    ensure_user_registered(message.chat.id, message)
-    lang = get_user_lang(message.chat.id)
-    chat_id = message.chat.id
-    user_states[chat_id] = {"kind": kind, "step": "title", "data": {}}
-    bot.send_message(chat_id, get_text("creating_post", lang, kind=kind))
 
 
-@bot.message_handler(commands=["start"])
-def cmd_start(message: telebot.types.Message):
-    chat_id = message.chat.id
-    # Check if user has joined the channel
-    if not is_user_member(bot,chat_id):
-        channel_username = os.getenv("CHANNEL_USERNAME")
-        markup = telebot.types.InlineKeyboardMarkup()
-        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
-        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
-        return
-    telegram_id = chat_id
-    user = get_user(telegram_id)
-    if user is None:
-        # Not registered, ask for phone
-        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        button = telebot.types.KeyboardButton(get_text("share_phone_button", "en"), request_contact=True)
-        markup.add(button)
-        bot.send_message(chat_id, get_text("share_phone", "en"), reply_markup=markup)
-        user_states[chat_id] = {"kind": "registration", "step": "phone"}
-    else:
-        # Already registered, show main menu
-        lang = user.get("language") or "en"
-        text = get_text("welcome", lang)
-        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-        markup.row(get_text("list", lang), get_text("search", lang))
-        markup.row(get_text("post_lost", lang), get_text("post_found", lang))
-        markup.row(get_text("settings", lang), get_text("help", lang))
-        bot.send_message(chat_id, text, reply_markup=markup)
 
 
-@bot.message_handler(commands=["list"])
-def cmd_list(message: telebot.types.Message):
-    chat_id = message.chat.id
-    # Check if user has joined the channel
-    if not is_user_member(bot, chat_id):
-        channel_username = os.getenv("CHANNEL_USERNAME")
-        markup = telebot.types.InlineKeyboardMarkup()
-        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
-        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
-        return
-    lang = get_user_lang(message.chat.id)
-    posts = get_items()
-    if not posts:
-        bot.reply_to(message, get_text("no_posts", lang))
-        return
-    for p in posts:
-        bot.send_message(message.chat.id, format_post(p, lang))
-
-
-@bot.message_handler(commands=["search"])
-def cmd_search(message: telebot.types.Message):
-    chat_id = message.chat.id
-    # Check if user has joined the channel
-    if not is_user_member(bot, chat_id):
-        channel_username = os.getenv("CHANNEL_USERNAME")
-        markup = telebot.types.InlineKeyboardMarkup()
-        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
-        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
-        return
-    lang = get_user_lang(message.chat.id)
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        bot.reply_to(message, get_text("search_usage", lang))
-        return
-    keyword = parts[1].lower()
-    results = search_items(keyword)
-    if not results:
-        bot.reply_to(message, get_text("no_results", lang))
-        return
-    for p in results:
-        bot.send_message(message.chat.id, format_post(p, lang))
-
-
-@bot.message_handler(commands=["post_lost"])
-def cmd_post_lost(message: telebot.types.Message):
-    chat_id = message.chat.id
-    # Check if user has joined the channel
-    if not is_user_member(bot, chat_id):
-        channel_username = os.getenv("CHANNEL_USERNAME")
-        markup = telebot.types.InlineKeyboardMarkup()
-        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
-        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
-        return
-    start_post_flow(message, "lost")
-
-
-@bot.message_handler(commands=["post_found"])
-def cmd_post_found(message: telebot.types.Message):
-    chat_id = message.chat.id
-    # Check if user has joined the channel
-    if not is_user_member(bot, chat_id):
-        channel_username = os.getenv("CHANNEL_USERNAME")
-        markup = telebot.types.InlineKeyboardMarkup()
-        markup.add(telebot.types.InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_username[1:]}"))
-        bot.send_message(chat_id, "Please join our channel to use the bot.", reply_markup=markup)
-        return
-    start_post_flow(message, "found")
 
 
 @bot.message_handler(func=lambda m: bool(m.text and m.text.strip() in MENU_BUTTON_TEXTS))
@@ -301,7 +204,7 @@ def handle_contact(message: telebot.types.Contact):
             bot.send_message(chat_id, text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error creating user: {e}")
-            bot.send_message(chat_id, "Error during registration. Please try again.")
+            bot.send_message(chat_id, "Error during registration. Please try again. or Report to admin @yegna_tv")
         del user_states[chat_id]
 
 
@@ -353,7 +256,7 @@ def handle_post_flow(message: telebot.types.Message):
             'user_id': chat_id
         }
         admin_id = int(os.getenv("ADMIN_ID"))
-        formatted = f"New {kind} post:\nTitle: {data['title']}\nDescription: {data['description']}\nContact: {data['contact']}\nUser ID: {chat_id}"
+        formatted = f"New {kind}Item:\nTitle: {data['title']}\nDescription: {data['description']}\nContact: {data['contact']}\nUser ID: {chat_id}"
         markup = telebot.types.InlineKeyboardMarkup()
         markup.row(
             telebot.types.InlineKeyboardButton("Approve", callback_data=f"approve_{pending_id}"),
