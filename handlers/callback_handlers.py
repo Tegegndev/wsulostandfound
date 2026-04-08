@@ -5,7 +5,7 @@ import telebot
 
 from localization import get_text
 from database import update_user_language, add_item
-from helpers import invalidate_user_lang_cache, format_post
+from helpers import invalidate_user_lang_cache, format_channel_post
 from services.report_service import report_to_admin
 from utils import get_pending_post, remove_pending_post
 
@@ -55,8 +55,26 @@ def register_callback_handlers(bot):
                         if not channel_username:
                             report_to_admin(bot, "handle_admin_action.approve", "CHANNEL_USERNAME is not set")
                         else:
-                            formatted_post = format_post(item_data, "en")
-                            bot.send_message(channel_username, formatted_post)
+                            formatted_post = format_channel_post(item_data, "en")
+                            markup = telebot.types.InlineKeyboardMarkup()
+                            item_id = item_data.get("id")
+                            url = None
+                            if item_id is not None:
+                                try:
+                                    bot_username = bot.get_me().username
+                                except Exception as e:
+                                    report_to_admin(bot, "handle_admin_action.approve", e)
+                                    bot_username = None
+                                if bot_username:
+                                    url = f"https://t.me/{bot_username}?start=contact_{item_id}"
+                            if item_id is not None and url:
+                                markup.add(
+                                    telebot.types.InlineKeyboardButton(
+                                        "Contact Owner",
+                                        url=url,
+                                    )
+                                )
+                            bot.send_message(channel_username, formatted_post, reply_markup=markup, parse_mode="HTML")
 
                     bot.send_message(user_id, "Your post has been approved and published!")
                     bot.answer_callback_query(call.id, "Post approved.")

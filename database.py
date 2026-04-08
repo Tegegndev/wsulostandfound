@@ -126,6 +126,19 @@ def get_items(type: str = None, status: str = 'active'):
         return []
 
 
+def get_item_by_id(item_id: int):
+    """Get a single item by id."""
+    try:
+        client = get_client()
+        response = client.table("items").select("*").eq("id", item_id).execute()
+        if response.data:
+            return response.data[0]
+        return None
+    except Exception:
+        logger.exception("Error retrieving item by id")
+        return None
+
+
 def search_items(keyword: str, type: str = None, status: str = 'active'):
     """Search items by keyword in item_name or description."""
     try:

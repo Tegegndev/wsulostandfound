@@ -2,8 +2,8 @@ import logging
 
 import telebot
 
-from database import get_items, get_user, search_items
-from helpers import format_post, get_user_lang, is_user_member, start_post_flow
+from database import get_items, get_user, search_items, get_item_by_id
+from helpers import format_post, get_user_lang, is_user_member, start_post_flow, get_user_contact
 from localization import get_text
 from services.menu_service import send_join_channel_prompt, send_main_menu
 from services.report_service import report_to_admin
@@ -18,6 +18,28 @@ def register_command_handlers(bot):
     def cmd_start(message: telebot.types.Message):
         try:
             chat_id = message.chat.id
+            parts = message.text.split(maxsplit=1)
+            if len(parts) > 1 and parts[1].startswith("contact_"):
+                item_id_str = parts[1].split("_", 1)[1]
+                if not item_id_str.isdigit():
+                    bot.reply_to(message, "Invalid request.")
+                    return
+
+                item = get_item_by_id(int(item_id_str))
+                if not item:
+                    bot.reply_to(message, "Item not found.")
+                    return
+
+                owner_id = item.get("user_telegram_id")
+                contact = get_user_contact(owner_id)
+                contact_msg = (
+                    "Contact Info\n"
+                    f"{get_text('title', 'en')}: {item.get('item_name', '')}\n"
+                    f"{get_text('contact', 'en')}: {contact}"
+                )
+                bot.send_message(chat_id, contact_msg)
+                return
+
             if not is_user_member(bot, chat_id):
                 send_join_channel_prompt(bot, chat_id)
                 return

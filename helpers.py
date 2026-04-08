@@ -1,6 +1,7 @@
 import os
 import logging
 import time
+import html
 import telebot
 from database import create_user, get_user, get_user_language
 from localization import get_text
@@ -15,9 +16,7 @@ _lang_cache = {}
 def format_post(post, lang: str) -> str:
     if isinstance(post, dict):
         return (
-            f"New {post.get('type', '').upper()} Post\n"
-            f"<a href='tg://user?id={post.get('user_telegram_id')}'>"
-            #f"{get_text('post', lang)} #{post.get('id', 'N/A')} — {post.get('type', '').upper()}\n"
+            f"{get_text('post', lang)} #{post.get('id', 'N/A')} — {post.get('type', '').upper()}\n"
             f"{get_text('title', lang)}: {post.get('item_name', '')}\n"
             f"{get_text('description', lang)}: {post.get('description', '')}\n"
             f"{get_text('contact', lang)}: {get_user_contact(post.get('user_telegram_id'))}"
@@ -30,6 +29,20 @@ def format_post(post, lang: str) -> str:
             f"{get_text('description', lang)}: {post.description}\n"
             f"{get_text('contact', lang)}: {post.contact}"
         )
+
+
+def format_channel_post(post: dict, lang: str = "en") -> str:
+    """Format a post for channel display with spoilered contact info."""
+    kind = html.escape(post.get("type", "").upper())
+    title = html.escape(post.get("item_name", "") or "")
+    description = html.escape(post.get("description", "") or "")
+    contact = html.escape(get_user_contact(post.get("user_telegram_id")))
+    return (
+        f"{kind} ITEM\n"
+        f"{get_text('title', lang)}: {title}\n"
+        f"{get_text('description', lang)}: {description}\n"
+        f"{get_text('contact', lang)}: <tg-spoiler>{contact}</tg-spoiler>"
+    )
 
 def get_user_contact(telegram_id: int) -> str:
     """Get user contact info."""
@@ -86,5 +99,3 @@ def start_post_flow(message: telebot.types.Message, kind: str,bot):
     chat_id = message.chat.id
     set_user_state(chat_id, {"kind": kind, "step": "title", "data": {}})
     bot.send_message(chat_id, get_text("creating_post", lang, kind=kind))
-
-
