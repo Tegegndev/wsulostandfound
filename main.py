@@ -5,12 +5,13 @@ from typing import List
 
 import telebot
 import dotenv
-from helpers import ensure_user_registered, get_user_lang, is_user_member, invalidate_user_lang_cache, format_post
+from helpers import ensure_user_registered, get_user_lang, is_user_member, format_post, start_post_flow
 from localization import get_text, get_supported_languages
-from database import create_user, update_user_language, add_item, get_items, search_items, get_user
+from database import create_user, get_items, search_items, get_user
 
 from commands import commands_register
-from utils import user_states
+from callbacks import register_callbacks
+from utils import user_states, pending_posts
 
 dotenv.load_dotenv()
 
@@ -21,9 +22,7 @@ logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(API_TOKEN)
 commands_register(bot)
-
-# Pending posts for admin approval
-pending_posts = {}
+register_callbacks(bot)
 
 
 @dataclass
@@ -110,16 +109,16 @@ def handle_button_press(message: telebot.types.Message):
         bot.send_message(chat_id, get_text("search_prompt", lang))
         return
     if action == "post_lost":
-        start_post_flow(message, "lost")
+        start_post_flow(message, "lost", bot)
         return
     if action == "post_found":
-        start_post_flow(message, "found")
+        start_post_flow(message, "found", bot)
         return
     if action == "settings":
         show_settings(message)
         return
     if action == "help":
-        cmd_start(message)
+        bot.send_message(message.chat.id, get_text("welcome", lang))
         return
 
 
@@ -130,56 +129,6 @@ def show_settings(message: telebot.types.Message):
     markup.row(telebot.types.InlineKeyboardButton(get_text("amharic", lang), callback_data="lang_am"))
     markup.row(telebot.types.InlineKeyboardButton(get_text("afan_oromo", lang), callback_data="lang_om"))
     bot.send_message(message.chat.id, get_text("choose_language", lang), reply_markup=markup)
-
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("lang_"))
-def handle_language_selection(call: telebot.types.CallbackQuery):
-    lang_code = call.data[5:]  # remove "lang_"
-    telegram_id = call.message.chat.id
-    try:
-        update_user_language(telegram_id, lang_code)
-        invalidate_user_lang_cache(telegram_id)
-        lang = lang_code
-        bot.answer_callback_query(call.id, get_text("language_set", lang, language=get_text(lang_code, lang)))
-        bot.edit_message_text(get_text("choose_language", lang), call.message.chat.id, call.message.message_id)
-    except Exception as e:
-        logger.error(f"Error updating language: {e}")
-        bot.answer_callback_query(call.id, "Error setting language.")
-
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
-def handle_admin_action(call: telebot.types.CallbackQuery):
-    action, pending_id = call.data.split("_", 1)
-    if pending_id not in pending_posts:
-        bot.answer_callback_query(call.id, "Post not found.")
-        return
-    post = pending_posts[pending_id]
-    user_id = post['user_id']
-    if action == "approve":
-        try:
-            added_item = add_item(
-                item_name=post['title'],
-                description=post['description'],
-                user_telegram_id=user_id,
-                type=post['kind'],
-                status='active'
-            )
-            if added_item and added_item.data:
-                item_data = added_item.data[0]
-                # Post to channel
-                channel_username = os.getenv("CHANNEL_USERNAME")
-                formatted_post = format_post(item_data, 'en')
-                bot.send_message(channel_username, formatted_post)
-            bot.send_message(user_id, "Your post has been approved and published!")
-            bot.answer_callback_query(call.id, "Post approved.")
-        except Exception as e:
-            logger.error(f"Error adding item: {e}")
-            bot.answer_callback_query(call.id, "Error approving post.")
-    elif action == "reject":
-        bot.send_message(user_id, "Your post has been rejected.")
-        bot.answer_callback_query(call.id, "Post rejected.")
-    del pending_posts[pending_id]
-    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
 
 
 @bot.message_handler(content_types=['contact'])
