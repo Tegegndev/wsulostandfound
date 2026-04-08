@@ -5,7 +5,8 @@ import telebot
 
 from localization import get_text
 from database import update_user_language, add_item
-from helpers import invalidate_user_lang_cache, format_channel_post
+from helpers import invalidate_user_lang_cache, format_channel_post, get_user_lang
+from services.list_service import send_list_page
 from services.report_service import report_to_admin
 from utils import get_pending_post, remove_pending_post
 
@@ -92,3 +93,20 @@ def register_callback_handlers(bot):
             logger.exception("handle_admin_action failed")
             report_to_admin(bot, "handle_admin_action", e)
             bot.answer_callback_query(call.id, "Error processing action.")
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("list_page_"))
+    def handle_list_pagination(call: telebot.types.CallbackQuery):
+        try:
+            page_str = call.data.split("_", 2)[2]
+            if not page_str.isdigit():
+                bot.answer_callback_query(call.id, "Invalid page.")
+                return
+            page = int(page_str)
+            chat_id = call.message.chat.id
+            lang = get_user_lang(chat_id)
+            send_list_page(bot, chat_id, page, lang)
+            bot.answer_callback_query(call.id)
+        except Exception as e:
+            logger.exception("handle_list_pagination failed")
+            report_to_admin(bot, "handle_list_pagination", e)
+            bot.answer_callback_query(call.id, "Error loading page.")

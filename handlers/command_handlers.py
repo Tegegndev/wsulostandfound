@@ -2,9 +2,10 @@ import logging
 
 import telebot
 
-from database import get_items, get_user, search_items, get_item_by_id
-from helpers import format_post, get_user_lang, is_user_member, start_post_flow, get_user_contact, get_dual_text
+from database import get_user, search_items, get_item_by_id
+from helpers import get_user_lang, is_user_member, start_post_flow, get_user_contact, get_dual_text
 from localization import get_text
+from services.list_service import send_list_page
 from services.menu_service import send_join_channel_prompt, send_main_menu
 from services.report_service import report_to_admin
 from utils import set_user_state
@@ -70,12 +71,11 @@ def register_command_handlers(bot):
                 return
 
             lang = get_user_lang(chat_id)
-            posts = get_items()
-            if not posts:
-                bot.reply_to(message, get_text("no_posts", lang))
-                return
-            for post in posts:
-                bot.send_message(chat_id, format_post(post, lang))
+            parts = message.text.split(maxsplit=1)
+            page = 1
+            if len(parts) > 1 and parts[1].isdigit():
+                page = int(parts[1])
+            send_list_page(bot, chat_id, page, lang)
         except Exception as e:
             logger.exception("cmd_list failed")
             report_to_admin(bot, "cmd_list", e)

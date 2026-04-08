@@ -2,9 +2,10 @@ import logging
 
 import telebot
 
-from database import create_user, get_items, search_items
+from database import create_user, search_items
 from helpers import ensure_user_registered, get_user_lang, is_user_member, format_post, start_post_flow, get_dual_text
 from localization import get_text, get_supported_languages
+from services.list_service import send_list_page
 from services.menu_service import send_join_channel_prompt, send_main_menu
 from services.post_service import submit_post_for_review
 from services.report_service import report_to_admin
@@ -48,12 +49,7 @@ def register_message_handlers(bot):
             ensure_user_registered(chat_id, message)
 
             if action == "list":
-                posts = get_items()
-                if not posts:
-                    bot.reply_to(message, get_text("no_posts", lang))
-                    return
-                for post in posts:
-                    bot.send_message(chat_id, format_post(post, lang))
+                send_list_page(bot, chat_id, 1, lang)
                 return
 
             if action == "search":
