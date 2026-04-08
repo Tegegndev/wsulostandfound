@@ -76,8 +76,8 @@ def ensure_user_registered(chat_id: int, message: telebot.types.Message):
         first_name = message.from_user.first_name
         try:
             create_user(user_id, username, first_name)
-        except:
-            pass  # ignore if already exists or error
+        except Exception:
+            logger.exception("Error ensuring user registration")
 
 
 def start_post_flow(message: telebot.types.Message, kind: str,bot):
@@ -86,6 +86,5 @@ def start_post_flow(message: telebot.types.Message, kind: str,bot):
     chat_id = message.chat.id
     set_user_state(chat_id, {"kind": kind, "step": "title", "data": {}})
     bot.send_message(chat_id, get_text("creating_post", lang, kind=kind))
-
 
 

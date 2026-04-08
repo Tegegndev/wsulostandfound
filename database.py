@@ -4,6 +4,7 @@
 
 from supabase import create_client, Client
 import os
+import logging
 from dotenv import load_dotenv
 from typing import Optional
 
@@ -17,6 +18,7 @@ key: Optional[str] = os.getenv("SUPABASE_KEY")
 # This gives clearer error messages if env vars are missing and avoids unexpected
 # initialization side-effects (helpful during testing/imports).
 _client: Optional[Client] = None
+logger = logging.getLogger(__name__)
 
 
 def get_client() -> Client:
@@ -42,9 +44,13 @@ def create_user(telegram_id: int, username: str = None, first_name: str = None, 
         "phone_number": phone_number,
         "language": "en"  # default language
     }
-    client = get_client()
-    response = client.table("botusers").insert(data).execute()
-    return response
+    try:
+        client = get_client()
+        response = client.table("botusers").insert(data).execute()
+        return response
+    except Exception:
+        logger.exception("Error creating user")
+        raise
 
 
 def get_user(telegram_id: int):
@@ -57,15 +63,19 @@ def get_user(telegram_id: int):
         else:
             return None
     except Exception as e:
-        print(f"Error retrieving user: {e}")
+        logger.exception("Error retrieving user")
         return None
 
 
 def update_user_language(telegram_id: int, language: str):
     """Update user's language preference."""
-    client = get_client()
-    response = client.table("botusers").update({"language": language}).eq("telegram_id", telegram_id).execute()
-    return response
+    try:
+        client = get_client()
+        response = client.table("botusers").update({"language": language}).eq("telegram_id", telegram_id).execute()
+        return response
+    except Exception:
+        logger.exception("Error updating user language")
+        raise
 
 
 def get_user_language(telegram_id: int):
@@ -77,6 +87,7 @@ def get_user_language(telegram_id: int):
             return response.data[0].get("language", "en")
         return None  # not registered
     except:
+        logger.exception("Error retrieving user language")
         return None
 
 
@@ -92,9 +103,13 @@ def add_item(item_name: str, description: str, user_telegram_id: int, type: str,
     }
     if item_image:
         data["item_image"] = item_image
-    client = get_client()
-    response = client.table("items").insert(data).execute()
-    return response
+    try:
+        client = get_client()
+        response = client.table("items").insert(data).execute()
+        return response
+    except Exception:
+        logger.exception("Error adding item")
+        raise
 
 
 def get_items(type: str = None, status: str = 'active'):
@@ -107,7 +122,7 @@ def get_items(type: str = None, status: str = 'active'):
         response = query.execute()
         return response.data
     except Exception as e:
-        print(f"Error retrieving items: {e}")
+        logger.exception("Error retrieving items")
         return []
 
 
@@ -122,7 +137,7 @@ def search_items(keyword: str, type: str = None, status: str = 'active'):
         ]
         return results
     except Exception as e:
-        print(f"Error searching items: {e}")
+        logger.exception("Error searching items")
         return []
 
 if __name__== "__main__":
