@@ -3,7 +3,7 @@ import logging
 import telebot
 
 from database import get_items, get_user, search_items, get_item_by_id
-from helpers import format_post, get_user_lang, is_user_member, start_post_flow, get_user_contact
+from helpers import format_post, get_user_lang, is_user_member, start_post_flow, get_user_contact, get_dual_text
 from localization import get_text
 from services.menu_service import send_join_channel_prompt, send_main_menu
 from services.report_service import report_to_admin
@@ -47,14 +47,15 @@ def register_command_handlers(bot):
             user = get_user(chat_id)
             if user is None:
                 markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-                button = telebot.types.KeyboardButton(get_text("share_phone_button", "en"), request_contact=True)
+                button_label = f"{get_text('share_phone_button', 'en')} / {get_text('share_phone_button', 'am')}"
+                button = telebot.types.KeyboardButton(button_label, request_contact=True)
                 markup.add(button)
-                bot.send_message(chat_id, get_text("share_phone", "en"), reply_markup=markup)
+                bot.send_message(chat_id, get_dual_text("share_phone"), reply_markup=markup)
                 set_user_state(chat_id, {"kind": "registration", "step": "phone"})
                 return
 
             lang = user.get("language") or "en"
-            send_main_menu(bot, chat_id, lang)
+            send_main_menu(bot, chat_id, lang, dual=True)
         except Exception as e:
             logger.exception("cmd_start failed")
             report_to_admin(bot, "cmd_start", e)

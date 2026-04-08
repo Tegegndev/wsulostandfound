@@ -3,6 +3,7 @@ import os
 import telebot
 
 from localization import get_text
+from helpers import get_dual_text
 from services.report_service import report_to_admin
 
 
@@ -34,9 +35,10 @@ def build_main_menu_markup(lang: str):
     return markup
 
 
-def send_main_menu(bot, chat_id: int, lang: str):
+def send_main_menu(bot, chat_id: int, lang: str, dual: bool = False):
     try:
-        bot.send_message(chat_id, get_text("welcome", lang), reply_markup=build_main_menu_markup(lang))
+        welcome_text = get_dual_text("welcome") if dual else get_text("welcome", lang)
+        bot.send_message(chat_id, welcome_text, reply_markup=build_main_menu_markup(lang))
     except Exception as e:
         report_to_admin(bot, "send_main_menu", e)
         bot.send_message(chat_id, "An error occurred. Please try again later.")

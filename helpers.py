@@ -95,7 +95,11 @@ def ensure_user_registered(chat_id: int, message: telebot.types.Message):
 
 def start_post_flow(message: telebot.types.Message, kind: str,bot):
     ensure_user_registered(message.chat.id, message)
-    lang = get_user_lang(message.chat.id)
     chat_id = message.chat.id
     set_user_state(chat_id, {"kind": kind, "step": "title", "data": {}})
-    bot.send_message(chat_id, get_text("creating_post", lang, kind=kind))
+    bot.send_message(chat_id, get_dual_text("creating_post", kind=kind))
+
+
+def get_dual_text(key: str, **kwargs) -> str:
+    """Return bilingual (English + Amharic) text for a key."""
+    return f"{get_text(key, 'en', **kwargs)}\n{get_text(key, 'am', **kwargs)}"

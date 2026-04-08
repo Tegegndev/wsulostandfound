@@ -3,7 +3,7 @@ import logging
 import telebot
 
 from database import create_user, get_items, search_items
-from helpers import ensure_user_registered, get_user_lang, is_user_member, format_post, start_post_flow
+from helpers import ensure_user_registered, get_user_lang, is_user_member, format_post, start_post_flow, get_dual_text
 from localization import get_text, get_supported_languages
 from services.menu_service import send_join_channel_prompt, send_main_menu
 from services.post_service import submit_post_for_review
@@ -134,14 +134,14 @@ def register_message_handlers(bot):
                 data["title"] = message.text.strip()
                 state["step"] = "description"
                 set_user_state(chat_id, state)
-                bot.send_message(chat_id, get_text("title_prompt", lang))
+                bot.send_message(chat_id, get_dual_text("title_prompt"))
                 return
 
             if step == "description":
                 data["description"] = message.text.strip()
                 state["step"] = "contact"
                 set_user_state(chat_id, state)
-                bot.send_message(chat_id, get_text("contact_prompt", lang))
+                bot.send_message(chat_id, get_dual_text("contact_prompt"))
                 return
 
             if step == "contact":
