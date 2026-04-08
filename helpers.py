@@ -4,7 +4,7 @@ import time
 import telebot
 from database import create_user, get_user, get_user_language
 from localization import get_text
-from utils import user_states
+from utils import set_user_state
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def start_post_flow(message: telebot.types.Message, kind: str,bot):
     ensure_user_registered(message.chat.id, message)
     lang = get_user_lang(message.chat.id)
     chat_id = message.chat.id
-    user_states[chat_id] = {"kind": kind, "step": "title", "data": {}}
+    set_user_state(chat_id, {"kind": kind, "step": "title", "data": {}})
     bot.send_message(chat_id, get_text("creating_post", lang, kind=kind))
 
 
