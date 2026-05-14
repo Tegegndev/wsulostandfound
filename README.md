@@ -2,6 +2,10 @@
 
 A Telegram bot that helps Wolaita Sodo University (WSU) community members report and find lost items. Users can post lost or found items, browse listings, search by keyword, and contact item owners — all through Telegram.
 
+## Screenshot
+
+![WSU Lost & Found Bot Screenshot](https://github.com/user-attachments/assets/03985e5d-4d24-40e1-b9db-9c7fe465539a)
+
 ## Features
 
 - **User Registration** — new users share their phone number to register before using the bot
